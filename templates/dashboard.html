@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Surveillance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 12px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+        .header h1 { font-size: 1.3em; color: #00d4ff; }
+        .metrics-bar { display: flex; gap: 16px; }
+        .metric {
+            text-align: center;
+            padding: 5px 16px;
+            background: rgba(0,212,255,0.08);
+            border-radius: 8px;
+            border: 1px solid #0f3460;
+        }
+        .metric .value { font-size: 1.5em; font-weight: bold; color: #00d4ff; }
+        .metric .label { font-size: 0.72em; color: #888; text-transform: uppercase; }
+
+        /* ---- Main layout ---- */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 310px;
+            gap: 12px;
+            padding: 12px;
+            height: calc(100vh - 60px);
+        }
+        .left-col { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+        .right-col { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+
+        /* ---- Camera grid ---- */
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 10px;
+        }
+        .camera-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #2a2a4a;
+        }
+        .cam-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 12px;
+            background: #16213e;
+        }
+        .cam-label { font-weight: 600; color: #00d4ff; font-size: 0.9em; }
+        .cam-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: #00ff88;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .camera-card img {
+            width: 100%;
+            display: block;
+            background: #000;
+            min-height: 180px;
+        }
+        .cam-controls {
+            padding: 5px 10px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 4px 10px;
+            border: 1px solid #0f3460;
+            background: #16213e;
+            color: #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.78em;
+        }
+        .btn:hover { background: #0f3460; color: #fff; }
+        .btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+        .btn.danger { color: #e94560; }
+        .cam-count { margin-left: auto; font-size: 0.8em; color: #00d4ff; }
+
+        /* ---- Panels ---- */
+        .panel {
+            background: #1a1a2e;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-head {
+            padding: 10px 14px;
+            background: #16213e;
+            border-radius: 8px 8px 0 0;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        .panel-head.red { color: #e94560; }
+        .panel-head.cyan { color: #00d4ff; }
+
+        /* ---- Chart ---- */
+        .chart-body { padding: 12px; }
+
+        /* ---- Alert list ---- */
+        .alert-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 8px;
+            max-height: 340px;
+        }
+        .alert-item {
+            padding: 7px 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            background: #16213e;
+            border-left: 3px solid;
+            font-size: 0.82em;
+        }
+        .alert-item.crowd    { border-color: #ffa502; }
+        .alert-item.phone    { border-color: #e94560; }
+        .alert-item.intrusion{ border-color: #ff4757; }
+        .alert-item.criminal {
+            border-color: #ff0000;
+            background: rgba(255, 0, 0, 0.12);
+            animation: crim-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes crim-pulse {
+            0%, 100% { background: rgba(255, 0, 0, 0.08); }
+            50% { background: rgba(255, 0, 0, 0.22); }
+        }
+        .alert-time { font-size: 0.73em; color: #555; font-family: monospace; }
+        .alert-cam {
+            font-size: 0.68em;
+            color: #0f3460;
+            background: rgba(15,52,96,0.35);
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+        .alert-msg { margin-top: 2px; }
+
+        /* ---- Gallery ---- */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            padding: 8px;
+            max-height: 230px;
+            overflow-y: auto;
+        }
+        .gallery-grid img {
+            width: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #2a2a4a;
+        }
+        .gallery-grid img:hover { border-color: #00d4ff; }
+
+        /* ---- Add camera ---- */
+        .add-form { padding: 10px 12px; }
+        .add-form input {
+            width: 100%;
+            padding: 5px 9px;
+            margin-bottom: 6px;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 0.82em;
+        }
+        .add-form button { width: 100%; }
+        .add-status { font-size: 0.78em; margin-top: 4px; }
+
+        /* ---- No cameras placeholder ---- */
+        .no-cam { text-align: center; padding: 50px; color: #444; font-size: 1.1em; }
+    </style>
+</head>
+
+<body>
+<!-- ============ HEADER ============ -->
+<div class="header">
+    <h1>&#128737; AI Surveillance Dashboard</h1>
+    <div class="metrics-bar">
+        <div class="metric">
+            <div class="value" id="m-people">0</div>
+            <div class="label">People</div>
+        </div>
+        <div class="metric">
+            <div class="value" id="m-cameras">{{ cameras|length }}</div>
+            <div class="label">Cameras</div>
+        </div>
+        <div class="metric">
+            <div class="value" id="m-alerts">0</div>
+            <div class="label">Alerts</div>
+        </div>
+        <div class="metric">
+            <div class="value" id="m-criminals" style="color:#ff0000;">0</div>
+            <div class="label">Criminal Hits</div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MAIN ============ -->
+<div class="main">
+
+    <!-- LEFT COLUMN -->
+    <div class="left-col">
+
+        <!-- Camera Grid -->
+        <div class="camera-grid" id="cam-grid">
+            {% for cam in cameras %}
+            <div class="camera-card" id="card-{{ cam.id }}">
+                <div class="cam-header">
+                    <span><span class="cam-dot"></span><span class="cam-label">{{ cam.label }}</span></span>
+                    <span style="font-size:0.75em;color:#555;">{{ cam.id }}</span>
+                </div>
+                <img src="/video_feed/{{ cam.id }}" id="feed-{{ cam.id }}" alt="Loading...">
+                <div class="cam-controls">
+                    <button class="btn" id="hm-{{ cam.id }}" onclick="toggleHeatmap('{{ cam.id }}')">&#127777; Heatmap</button>
+                    <button class="btn" onclick="takeSnapshot('{{ cam.id }}')">&#128247; Snap</button>
+                    <button class="btn danger" onclick="removeCam('{{ cam.id }}')">&#10005; Remove</button>
+                    <span class="cam-count" id="cnt-{{ cam.id }}">0 people</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if not cameras %}
+        <div class="no-cam" id="no-cam-msg">No cameras connected &mdash; add one from the right panel.</div>
+        {% endif %}
+
+        <!-- Chart -->
+        <div class="panel">
+            <div class="panel-head cyan">&#128200; People Count Over Time</div>
+            <div class="chart-body">
+                <canvas id="chart" height="90"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+        <!-- Criminal Alert Panel -->
+        <div class="panel" style="border:1px solid #ff0000;">
+            <div class="panel-head" style="color:#ff0000;background:#2a0a0a;">&#128680; Criminal Alerts</div>
+            <div class="alert-list" id="criminal-alert-list" style="max-height:200px;">
+                <div style="text-align:center;color:#444;padding:16px;">No criminal detections&hellip;</div>
+            </div>
+        </div>
+
+        <!-- Alert Panel -->
+        <div class="panel" style="flex:1;">
+            <div class="panel-head red">&#128276; Live Alerts</div>
+            <div class="alert-list" id="alert-list">
+                <div style="text-align:center;color:#444;padding:20px;">Waiting for events&hellip;</div>
+            </div>
+        </div>
+
+        <!-- Screenshot Gallery -->
+        <div class="panel">
+            <div class="panel-head cyan">&#128248; Alert Screenshots</div>
+            <div class="gallery-grid" id="gallery"></div>
+        </div>
+
+        <!-- Add Camera -->
+        <div class="panel">
+            <div class="panel-head cyan">&#10133; Add Camera</div>
+            <div class="add-form">
+                <input id="f-id" placeholder="Camera ID  (e.g. cam1)">
+                <input id="f-src" placeholder="Source  (0, rtsp://..., http://...)">
+                <input id="f-label" placeholder="Label  (e.g. Front Door)">
+                <button class="btn" onclick="addCamera()">Add Camera</button>
+                <div class="add-status" id="add-status"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ---- Helpers ---- */
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+/* ---- Heatmap toggle ---- */
+const hmState = {};
+function toggleHeatmap(id) {
+    hmState[id] = !hmState[id];
+    const img = document.getElementById('feed-' + id);
+    const btn = document.getElementById('hm-' + id);
+    if (hmState[id]) {
+        img.src = '/video_feed/' + encodeURIComponent(id) + '?heatmap=1';
+        btn.classList.add('active');
+    } else {
+        img.src = '/video_feed/' + encodeURIComponent(id);
+        btn.classList.remove('active');
+    }
+}
+
+/* ---- Snapshot ---- */
+function takeSnapshot(id) {
+    window.open('/api/cameras/' + encodeURIComponent(id) + '/snapshot', '_blank');
+}
+
+/* ---- Remove camera ---- */
+function removeCam(id) {
+    if (!confirm('Remove camera ' + id + '?')) return;
+    fetch('/api/cameras/' + encodeURIComponent(id) + '/remove', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => {
+            const card = document.getElementById('card-' + id);
+            if (card) card.remove();
+        });
+}
+
+/* ---- Add camera ---- */
+function addCamera() {
+    const id = document.getElementById('f-id').value.trim();
+    const source = document.getElementById('f-src').value.trim();
+    const label = document.getElementById('f-label').value.trim() || id;
+    const st = document.getElementById('add-status');
+    if (!id || !source) {
+        st.style.color = '#e94560';
+        st.textContent = 'ID and Source are required.';
+        return;
+    }
+    fetch('/api/cameras/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, source, label })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            st.style.color = '#e94560';
+            st.textContent = data.error;
+        } else {
+            st.style.color = '#00ff88';
+            st.textContent = 'Added! Reloading\u2026';
+            setTimeout(() => location.reload(), 800);
+        }
+    })
+    .catch(e => { st.style.color = '#e94560'; st.textContent = 'Error: ' + e; });
+}
+
+/* ---- Chart.js ---- */
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'People',
+            data: [],
+            borderColor: '#00d4ff',
+            backgroundColor: 'rgba(0,212,255,0.08)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 0,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: { ticks: { color: '#555', maxTicksLimit: 20, font: { size: 10 } }, grid: { color: '#1a1a2e' } },
+            y: { beginAtZero: true, ticks: { color: '#555', stepSize: 1 }, grid: { color: '#1a1a2e' } }
+        },
+        plugins: { legend: { display: false } },
+        animation: { duration: 0 },
+    }
+});
+
+/* ---- Polling: metrics (1 s) ---- */
+setInterval(() => {
+    fetch('/api/metrics').then(r => r.json()).then(data => {
+        document.getElementById('m-people').textContent = data.total_people;
+        document.getElementById('m-alerts').textContent = data.total_alerts;
+        document.getElementById('m-cameras').textContent = data.cameras.length;
+
+        data.cameras.forEach(c => {
+            const el = document.getElementById('cnt-' + c.id);
+            if (el) el.textContent = c.person_count + ' people';
+        });
+
+        if (data.history && data.history.length) {
+            chart.data.labels = data.history.map(h => h.time);
+            chart.data.datasets[0].data = data.history.map(h => h.person_count);
+            chart.update();
+        }
+    }).catch(() => {});
+}, 1000);
+
+/* ---- Polling: alerts (2 s) ---- */
+setInterval(() => {
+    fetch('/api/alerts?limit=40').then(r => r.json()).then(alerts => {
+        if (!alerts.length) return;
+        const list = document.getElementById('alert-list');
+        list.innerHTML = alerts.map(a =>
+            '<div class="alert-item ' + esc(a.type) + '">' +
+                '<span class="alert-time">' + esc(a.time) + '</span>' +
+                '<span class="alert-cam">' + esc(a.camera) + '</span>' +
+                '<div class="alert-msg">' + esc(a.message) + '</div>' +
+            '</div>'
+        ).join('');
+    }).catch(() => {});
+}, 2000);
+
+/* ---- Polling: screenshots (5 s) ---- */
+setInterval(() => {
+    fetch('/api/screenshots').then(r => r.json()).then(files => {
+        const g = document.getElementById('gallery');
+        g.innerHTML = files.slice(0, 15).map(f =>
+            '<img src="/screenshots/' + encodeURIComponent(f) + '" title="' + esc(f) + '" onclick="window.open(this.src)">'
+        ).join('');
+    }).catch(() => {});
+}, 5000);
+
+/* ---- Polling: criminal alerts (2 s) ---- */
+setInterval(() => {
+    fetch('/api/criminal_alerts?limit=20').then(r => r.json()).then(alerts => {
+        document.getElementById('m-criminals').textContent = alerts.length;
+        const list = document.getElementById('criminal-alert-list');
+        if (!alerts.length) return;
+        list.innerHTML = alerts.map(a =>
+            '<div class="alert-item criminal">' +
+                '<span class="alert-time">' + esc(a.time) + '</span>' +
+                '<span class="alert-cam">' + esc(a.camera) + '</span>' +
+                '<div class="alert-msg" style="color:#ff4444;font-weight:600;">' + esc(a.message) + '</div>' +
+            '</div>'
+        ).join('');
+    }).catch(() => {});
+}, 2000);
+</script>
+</body>
+</html>
